@@ -1251,8 +1251,11 @@ int Emulate8080Op(State8080 *state) {
         case 0x45:
             UnimplementedInstruction(state);
             break;
-        case 0x46:
-            UnimplementedInstruction(state);
+        case 0x46: // MOV B, M
+        {
+            uint16_t offset = (state->h << 8) | (state->l);
+            state->b = state->memory[offset];
+        }
             break;
         case 0x47:
             UnimplementedInstruction(state);
@@ -1332,35 +1335,35 @@ int Emulate8080Op(State8080 *state) {
             state->e = state->memory[offset];
         }
             break;
-        case 0x5f:
-            UnimplementedInstruction(state);
+        case 0x5f: // MOV E, A
+            state->e = state->a;
             break;
-        case 0x60:
-            UnimplementedInstruction(state);
+        case 0x60: // MOV H, B
+            state->h = state->b;
             break;
-        case 0x61:
-            UnimplementedInstruction(state);
+        case 0x61: // MOV H, C
+            state->h = state->c;
             break;
-        case 0x62:
-            UnimplementedInstruction(state);
+        case 0x62: // MOV H, D
+            state->h = state->d;
             break;
-        case 0x63:
-            UnimplementedInstruction(state);
+        case 0x63: // MOV H, E
+            state->h = state->e;
             break;
-        case 0x64:
-            UnimplementedInstruction(state);
+        case 0x64: // MOV H, H
+            state->h = state->h;
             break;
-        case 0x65:
-            UnimplementedInstruction(state);
+        case 0x65: // MOV H, L
+            state->h = state->l;
             break;
-        case 0x66:                            //MOV H,M
+        case 0x66: //MOV H,M
         {
             uint16_t offset = (state->h << 8) | (state->l);
             state->h = state->memory[offset];
         }
             break;
-        case 0x67:
-            UnimplementedInstruction(state);
+        case 0x67: // MOV H, A
+            state->h = state->a;
             break;
         case 0x68:
             UnimplementedInstruction(state);
@@ -1404,32 +1407,31 @@ int Emulate8080Op(State8080 *state) {
         case 0x75:
             UnimplementedInstruction(state);
             break;
-        case 0x76:
-            UnimplementedInstruction(state);
-            break;
-        case 0x77:                            //MOV    M,A
+        case 0x76: // HLT
+            exit(0);
+        case 0x77: //MOV M,A
         {
             uint16_t offset = (state->h << 8) | (state->l);
             state->memory[offset] = state->a;
         }
             break;
-        case 0x78:
-            UnimplementedInstruction(state);
+        case 0x78: // MOV A, B
+            state->a = state->b;
             break;
-        case 0x79:
-            UnimplementedInstruction(state);
+        case 0x79: // MOV A, C
+            state->a = state->c;
             break;
-        case 0x7a:
+        case 0x7A: // MOV A, D
             state->a = state->d;
-            break;    //MOV D,A
-        case 0x7b:
+            break;
+        case 0x7B: // MOV A, E
             state->a = state->e;
-            break;    //MOV E,A
-        case 0x7c:
+            break;
+        case 0x7C: // MOV A, H
             state->a = state->h;
-            break;    //MOV H,A
-        case 0x7d:
-            UnimplementedInstruction(state);
+            break;
+        case 0x7D: // MOV A, L
+            state->a = state->l;
             break;
         case 0x7e:                            //MOV A,M
         {
@@ -1697,8 +1699,18 @@ int Emulate8080Op(State8080 *state) {
         case 0xc3:                        //JMP address
             state->pc = (opcode[2] << 8) | opcode[1];
             break;
-        case 0xc4:
-            UnimplementedInstruction(state);
+        case 0xc4: // CNZ address
+        {
+            if (state->cc.z == 0)
+            {
+                uint16_t ret = state->pc + 2;
+                state->memory[state->sp-1] = (ret >> 8) & 0xff;
+                state->memory[state->sp-2] = (ret & 0xff);
+                state->sp = state->sp - 2;
+                state->pc = (opcode[2] << 8) | opcode[1];
+            } else
+                state->pc += 2;
+        }
             break;
         case 0xc5:                        //PUSH   B
         {
@@ -1707,7 +1719,7 @@ int Emulate8080Op(State8080 *state) {
             state->sp = state->sp - 2;
         }
             break;
-        case 0xc6:                        //ADI    byte
+        case 0xc6: //ADI    byte
         {
             uint16_t x = (uint16_t) state->a + (uint16_t) opcode[1];
             state->cc.z = ((x & 0xff) == 0);
@@ -2128,8 +2140,12 @@ int main(int argc, char **argv) {
     State8080 *state = Init8080();
     time_t lastInterrupt = 0;
 
-    ReadFileIntoMemoryAt(state, "cpudiag.bin", 0x100);
+    ReadFileIntoMemoryAt(state, "invaders.h", 0);
+    ReadFileIntoMemoryAt(state, "invaders.g", 0x800);
+    ReadFileIntoMemoryAt(state, "invaders.f", 0x1000);
+    ReadFileIntoMemoryAt(state, "invaders.e", 0x1800);
 
+/*
     //Fix the first instruction to be JMP 0x100
     state->memory[0] = 0xc3;
     state->memory[1] = 0;
@@ -2144,6 +2160,7 @@ int main(int argc, char **argv) {
     state->memory[0x59c] = 0xc3; //JMP
     state->memory[0x59d] = 0xc2;
     state->memory[0x59e] = 0x05;
+*/
 
     while (!done)
     {

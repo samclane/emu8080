@@ -3,6 +3,12 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <time.h>
+#include <stddef.h>
+#include "SDL2/SDL.h"
+
+//Screen dimension constants
+const int SCREEN_WIDTH = 256;
+const int SCREEN_HEIGHT = 224;
 
 typedef struct ConditionCodes {
     uint8_t z:1;
@@ -1185,13 +1191,28 @@ int Emulate8080Op(State8080 *state) {
         }
             break;
         case 0x33:
-            UnimplementedInstruction(state);
+        {
+            state->sp += 1;
+            state->pc += 1;
+        }
             break;
         case 0x34:
-            UnimplementedInstruction(state);
+        {
+            //AC set if lower nibble of h was zero prior to dec
+            uint16_t offset = (state->h << 8) | state->l;
+            state->memory[offset] += 1;
+            FlagsZSP(state, state->memory[offset]);
+            state->pc++;
+        }
             break;
         case 0x35:
-            UnimplementedInstruction(state);
+        {
+            //AC set if lower nibble of h was zero prior to dec
+            uint16_t offset = (state->h << 8) | state->l;
+            state->memory[offset] -= 1;
+            FlagsZSP(state, state->memory[offset]);
+            state->pc++;
+        }
             break;
         case 0x36:                            //MVI	M,byte
         {
@@ -2134,6 +2155,11 @@ State8080 *Init8080(void) {
     return state;
 }
 
+void set_pixel(Uint32* pixels, int x, int y, Uint8 pixel)
+{
+    pixels[x + y * SCREEN_WIDTH] = pixel;
+}
+
 int main(int argc, char **argv) {
     int done = 0;
     int vblankcycles = 0;
@@ -2162,9 +2188,44 @@ int main(int argc, char **argv) {
     state->memory[0x59e] = 0x05;
 */
 
+    // Initialize SDL
+    if(SDL_Init(SDL_INIT_VIDEO) < 0)
+        printf("SDL couldn't initialize! SDL_Error: %s\n", SDL_GetError());
+    // The window we'll be rendering to
+    SDL_Window* window = SDL_CreateWindow("SDL Tutorial", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
+
+    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC,
+                                             SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    Uint32 pixels[SCREEN_WIDTH * SCREEN_HEIGHT];
+    memset(pixels, 255, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(Uint32));
+
+    // Initialize SDL
+    if(SDL_Init(SDL_INIT_VIDEO) < 0)
+        printf("SDL couldn't initialize! SDL_Error: %s\n", SDL_GetError());
+    else
+    {
+        if(window == NULL)
+        {
+            printf("Window couldn't be created! SDL_Error %s\n, SDL_GetError()", SDL_GetError());
+        }
+    }
+
     while (!done)
     {
         done = Emulate8080Op(state);
+
+        for (int x = 0; x < SCREEN_WIDTH; x++)
+        {
+            for (int y = 0; y < SCREEN_HEIGHT; y++)
+            {
+                int offset = 0x2400 + (x + y * SCREEN_WIDTH);
+                set_pixel(pixels, x, y, state->memory[offset]);
+            }
+        }
+        SDL_UpdateTexture(texture, NULL, pixels, SCREEN_WIDTH * sizeof(Uint32));
 
         if ( time(NULL) - lastInterrupt > 1.0/60.0) // 1/60 seconds has elapsed
         {
@@ -2177,7 +2238,18 @@ int main(int argc, char **argv) {
                 lastInterrupt = time(NULL);
             }
         }
+
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
     }
+    free(pixels);
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    //Destroy window
+    SDL_DestroyWindow( window );
+    //Quit SDL subsystems
+    SDL_Quit();
     return 0;
 }
 
